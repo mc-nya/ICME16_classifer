@@ -50,6 +50,8 @@ int GetSizeInImageBySizeIn3D(const int iSizeIn3D, const int iDistance)
 }
 int findz();
 
+// ALL THE ARRAY HERE CAN BE CHANGED TO VECTOR AND BE PUT IN TO FINDZ()
+// THEY ARE UGLY GLOBAL VARIBLES
 // The queue in BFS
 int quei[500000], quej[500000];
 // recorder of pixel sets
