@@ -1,7 +1,7 @@
 #include"headfile.h";
 #include"Confirm.h"
 #include<io.h>
-float GetDist(cv::Mat &img, Point2i p1, Point2i p2){		//输出：毫米	输入：poing2i(i,j);
+float GetDist(cv::Mat &img, Point2i p1, Point2i p2){		//output:mm    input: poing2i(i,j);
 	float dist = 0;
 	float x1 = img.at<cv::Vec3f>(p1.y, p1.x)[0];
 	float y1 = img.at<cv::Vec3f>(p1.y, p1.x)[1];
@@ -12,6 +12,8 @@ float GetDist(cv::Mat &img, Point2i p1, Point2i p2){		//输出：毫米	输入：poing2i
 	dist = sqrt((x1 - x2)*(x1 - x2) + (y1 - y2)*(y1 - y2) + (z1 - z2) *(z1 - z2));
 	return dist;
 }
+
+// frok from PCL, fix the const factor for **KINECT ONLY**!!!
 int GetSizeInImageBySizeIn3D(const int iSizeIn3D, const int iDistance)
 {
 	if (iDistance == 0 || iSizeIn3D == 0)
@@ -48,29 +50,29 @@ int GetSizeInImageBySizeIn3D(const int iSizeIn3D, const int iDistance)
 }
 int findz();
 
+// The queue in BFS
 int quei[500000], quej[500000];
-int seti[500000], setj[500000], setnum[500000];		//flood时使用队列que  集合set
+// recorder of pixel sets
+int seti[500000], setj[500000], setnum[500000];		
+// union-find set for each pixel
 int flag[480][640];		//集合标志
-int h, t, setcount;		//队列标志
-string number = "3700";			//文件帧数
+// head pointer, tail pointer and set count in BFS
+int h, t, setcount;		
+
+
 fstream fout;
 string outfile;
-string outfile2;
 int pixelNum;
 int main(){
+	
 	for (int i = 50800; i < 51400; i++){
-
 		if ((i + 5) % 1 == 0){
-			number = to_string(i);
+			string number = to_string(i);
 			outfile = "H:\\result\\flood\\47\\" + number + ".png";
-			//outfile2 = "F:\\TMM_2017\\First_step_2\\38\\" + number + "_cover.png";
-			//cout << i << endl;
-			findz();
+			findz(number, outfile);
 		}
 
 	}
-
-	//	fout.close();
 
 }
 
@@ -84,28 +86,11 @@ const double camera_fx = 518.0;
 const double camera_fy = 519.0;
 
 
-int findz(){
+int findz(const string &number, const string &outfile){
 
-	string sfileDepth = "E:\\实验室\\dataset\\47\\depth\\depth_" + number + ".png";
-	string sfileRGB = "E:\\实验室\\dataset\\47\\rgb\\rgb_" + number + ".png";
+	string sfileDepth = "E:\\lab\\dataset\\47\\depth\\depth_" + number + ".png";
+	string sfileRGB = "E:\\lab\\dataset\\47\\rgb\\rgb_" + number + ".png";
 
-	//string sfileRGB = "E:\\实验室\\dataset\\38\\rgb\\rgb_" + number+".png";
-	//string sfileDepth = "E:\\实验室\\dataset\\38\\depth\\depth_" + number + ".png";
-
-	//string sfileRGB = "E:\\实验室\\dataset\\10D\\rgb\\1 (" + number + ").png";
-	//string sfileDepth = "E:\\实验室\\dataset\\10D\\depth\\png\\1 (" + number + ")_16UC1.png";
-
-	//string sfileRGB = "E:\\实验室\\dataset\\18D\\rgb\\1 (" + number + ").png";
-	//string sfileDepth = "E:\\实验室\\dataset\\18D\\depth\\png\\1 (" + number + ")_16UC1.png";
-
-	//string sfileRGB = "E:\\实验室\\dataset\\1\\rgb\\1 (" + number + ").png";
-	//string sfileDepth = "E:\\实验室\\dataset\\1\\depth\\png\\1 (" + number + ")_8UC1_From1File.png";
-
-	//string sfileRGB = "E:\\实验室\\dataset\\8\\rgb\\1 (" + number + ").png";
-	//string sfileDepth = "E:\\实验室\\dataset\\8\\depth\\png\\1 (" + number + ")_8UC1_From8File.png";
-
-	//string sfileRGB = "E:\\实验室\\dataset\\11\\rgb\\1 (" + number + ").png";
-	//string sfileDepth = "E:\\实验室\\dataset\\11\\depth\\png\\1 (" + number + ")_16UC1.png";
 
 	char cfile1[200], cfile2[200];
 	strncpy(cfile1, sfileDepth.c_str(), sfileDepth.length());
@@ -118,33 +103,29 @@ int findz(){
 	Mat rawRGB=imread(sfileRGB, CV_LOAD_IMAGE_ANYCOLOR | CV_LOAD_IMAGE_ANYDEPTH);
 	Mat rawDepth = imread(sfileDepth, CV_LOAD_IMAGE_ANYCOLOR | CV_LOAD_IMAGE_ANYDEPTH);
 	Mat properRGB = rawRGB.clone();
-	Mat headCloud;			//生成点云
+	Mat headCloud;			
 	headCloud = Mat(480, 640, CV_32FC3);
 
-	
-	double pixelLength = (240.0 / tan(21.5*PI / 180.0) + 320.0 / tan(28.5*PI / 180.0)) / 2.0;
-	double l, ang, depth, x, y, z;
-
+	// initialize union-find set of pixels
 	for (int j = 0; j < 480; j++){
 		for (int i = 0; i < 640; i++){
 			flag[j][i] = 0;
 		}
 	}
 
-	clock_t timeStart = clock();
+
+	//generate point cloud
 	for (int j = 1; j < rawDepth.rows; ++j){
 		for (int i = 1; i < rawDepth.cols; ++i){
 			int d = rawDepth.at<unsigned short>(j, i);
-			
+			// skip too near and too far pixels
 			if (rawDepth.at<unsigned short>(j, i)<800 || rawDepth.at<unsigned short>(j, i)>10000){
 				headCloud.at<cv::Vec3f>(j, i)[0] = 0;
 				headCloud.at<cv::Vec3f>(j, i)[1] = 0;
 				headCloud.at<cv::Vec3f>(j, i)[2] = 0;
 				continue;
 			}
-			if (j>240 && i < 320){
-				int count = 0;
-			}
+			// calculate x,y,z and store them in position 0,1,2
 			headCloud.at<cv::Vec3f>(j, i)[2] = double(d) / camera_factor;
 			headCloud.at<cv::Vec3f>(j, i)[0] = (i - camera_cx) * headCloud.at<cv::Vec3f>(j, i)[2] / camera_fx;
 			headCloud.at<cv::Vec3f>(j, i)[1] = (j - camera_cy) * headCloud.at<cv::Vec3f>(j, i)[2] / camera_fy;
@@ -157,18 +138,28 @@ int findz(){
 	setcount = 0;
 	for (int j = 0; j < rawDepth.rows; j++){
 		for (int i = 0; i < rawDepth.cols; i++){
+			// flag[j][i]==0 means the pixel isn't in a set, so start search here
 			if (flag[j][i] == 0 && rawDepth.at<unsigned short>(j, i)>800 && rawDepth.at<unsigned short>(j, i)<8000){
-				h = 1; t = 1;
+				
+				// add a new set
 				setcount++;
-				quei[1] = i;	quej[1] = j;
+				//record start point of this set
 				seti[setcount] = i; setj[setcount] = j;
+				// record number of pixels in this set
 				setnum[setcount] = 1;
+				// change set number in flag arrary
 				flag[j][i] = setcount;
+
+				// initialize BFS queue
+				h = 1; t = 1;
+				quei[1] = i;	quej[1] = j;
 				while (h <= t){
 					int tempi = quei[h];
 					int tempj = quej[h];
 					int pixelNum = 80;
 					
+					//explore different direction
+					// if a pixel is not explored, put it in the queue and change it's flag
 					if (tempi>0 && flag[tempj][tempi-1]==0){
 						double dist = GetDist(headCloud, Point2i(tempi, tempj), Point2i(tempi - 1, tempj));
 						if (dist < pixelNum){
@@ -207,19 +198,15 @@ int findz(){
 			}
 		}
 	}
-	clock_t timeEnd = clock();
 
-	//cout << double(timeEnd - timeStart) << endl;
-	totalCount++;
-	totalNum += timeEnd - timeStart;
-	//cout << double(totalNum) / double(totalCount) << endl << endl;
+
+
+	// generate RGB colors for visualization
 	for (int j = 0; j < properRGB.rows; j++){
 		for (int i = 0; i < properRGB.cols; i++){
 			int pixelNum = GetSizeInImageBySizeIn3D(150, rawDepth.at<unsigned short>(j, i));
 			int curset = flag[j][i];
 			int dep = rawDepth.at<unsigned short>(setj[curset], seti[curset]);
-
-			//if (pixelNum>0 && (setnum[flag[j][i]] / (pixelNum ^ 2)>80 || setnum[flag[j][i]]>300)){
 			if (setnum[flag[j][i]]*dep>1200000){
 				properRGB.at<Vec3b>(j, i)[0] = (flag[j][i] * 20) % 255;
 				properRGB.at<Vec3b>(j, i)[1] = (flag[j][i] * 30) % 255;
@@ -227,6 +214,9 @@ int findz(){
 			}
 		}
 	}
+
+
+
 
 	Mat drawRGB = rawRGB.clone();
 	int ccount = 0;
@@ -240,62 +230,31 @@ int findz(){
 		int dep = rawDepth.at<unsigned short>(j, i);
 	
 		// select imageblock by # pixels in the set
+		// it may change to other threshold such as depth*setnum[k]< *a number*
 		if ((setnum[k] / (pixelNum ^ 2)  > 80) || setnum[k]>150){
 
-			// test the imageblock, if not a person, skip
-			// different classifier
-			//if (!Confirm::HOTJHCHconfirm(rawDepth, headCloud, rawRGB, i, j, pixelNum)){
-			if (!Confirm::HOTRGBDconfirm(rawDepth, rawRGB, i, j, pixelNum)){
-			//if (!Confirm::HOTconfirm(rawDepth,rawRGB,i,j,pixelNum)){
-				
-				// save nagative samples
-				//ncount++
-				//Confirm::saveRect(rawDepth, rawRGB, headCloud, i, j, pixelNum, "E:\\lab\\analysis\\hcn\\N_" + number + "_" + to_string(ncount) + "_");
-				continue;
-			}
+
+			// ***********second step here*******************
+			// use another classfier to test the head top region
+			//if (!Confirm::HOTRGBDconfirm(rawDepth, rawRGB, i, j, pixelNum)){
+			//	continue;
+			//}
+
 			ccount++;
 			Point p(i, j);
-			
-
-			//filter out near headpoint
-			int valid = 1;
-			for (auto point : validPoint){
-				//cout << abs(point.x - i) + abs(point.y - j) << endl;
-				if ((abs(point.x - i) ) < 20)
-				{
-					valid = 0;
-					break;
-				}
-
-			}
-			validPoint.push_back(p);
-			//if (!valid) continue;
-			
-			//  save positive samples
-			//Confirm::saveRect(rawDepth, rawRGB, headCloud, i, j, pixelNum, "E:\\lab\\analysis\\hcp\\P_" + number + "_" + to_string(ccount) + "_");
-
 
 			circle(drawRGB, Point(i, j), 3, Scalar(0, 69, 255), -1, 8);
 			circle(properRGB, Point(i, j), 3, Scalar(0, 69, 255), -1, 8);
 			rectangle(drawRGB, cv::Rect(i - 1.5*pixelNum, j - 0.7*pixelNum, 3 * pixelNum, 4 * pixelNum), cv::Scalar(47, 230, 173), 5, 8);
-			//putText(drawRGB, to_string(ccount), cvPoint(i, j), CV_FONT_HERSHEY_DUPLEX, 0.5, CV_RGB(255, 255, 0));
+
 		}
 	}
 
-	//cv::putText(drawRGB, "Frame: "+number, cvPoint(25, 25), CV_FONT_HERSHEY_DUPLEX, 1, CV_RGB(255, 255, 0));
-	imshow("test1", drawRGB);
-	//imshow("test2", properRGB);
-	//imshow("test2", rawDepth);
-	//imshow("test3", headCloud);
-	//imwrite("E:\\lab\\SuperPixelDemo\\output\\47\\x4\\DetectResult_" + number + ".png", drawRGB);
-	//imwrite("E:\\lab\\analysis\\影片\\38_2\\" + number + ".png", drawRGB);
-	//Mat depth8;
-	//rawDepth.convertTo(depth8, CV_8U, 255.0 / 8000.0);
-	//applyColorMap(depth8, properRGB, COLORMAP_JET);
-	cv::imwrite(outfile, drawRGB);
-	//cv::imwrite(outfile2, properRGB);
-	//fout << ccount << endl;
-	//imwrite("F:\\论文图片数据\\47\\" + number + ".png",properRGB);
+
+	imshow("result of first step", drawRGB);
+
+	//cv::imwrite(outfile, drawRGB);
+
 	cvWaitKey(200);
 
 	return 0;
